@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meal-related biliary influx in matched liver geometry</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; background: #f7f8fa; }
+    #view { width: 100%; height: 100%; display: block; }
+    #panel { position: fixed; top: 14px; left: 14px; z-index: 2; width: 290px; padding: 14px 16px; color: #17202a; background: rgba(255,255,255,.94); border: 1px solid #d6dbe1; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    label { display: block; margin: 8px 0; font-size: 13px; }
+    input[type=range] { width: 150px; vertical-align: middle; }
+    button { margin: 5px 5px 0 0; padding: 6px 9px; border: 1px solid #c5ccd4; border-radius: 6px; background: white; cursor: pointer; }
+    #status { margin-top: 10px; font-size: 12px; color: #5b6570; line-height: 1.35; }
+    #controlsHint { margin-top: 7px; font-size: 11px; color: #68727c; }
+    #scenario { margin-top: 10px; padding-top: 9px; border-top: 1px solid #e1e5e9; }
+    #wave { width: 100%; height: 58px; display: block; margin-top: 5px; background: #fafbfc; border: 1px solid #e2e5e8; border-radius: 5px; }
+    #scenarioTime { width: 100%; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <h1>Matched biliary tree and liver surface</h1>
+    <label><input id="showTree" type="checkbox" checked> <span class="swatch" style="background:#e53935"></span>Biliary tree</label>
+    <label><input id="showSurface" type="checkbox" checked> <span class="swatch" style="background:#d9a441"></span>Liver surface</label>
+    <label>Surface opacity <input id="opacity" type="range" min="0.05" max="0.8" step="0.05" value="0.22"> <output id="opacityValue">0.22</output></label>
+    <button id="fit">Fit view</button><button id="wire">Surface wireframe</button>
+    <div id="controlsHint">Rotate: left-drag · Pan: right-drag · Zoom: wheel/middle-drag</div>
+    <div id="scenario">
+      <strong>Meal-related biliary influx</strong>
+      <button id="play">Play</button><button id="reset">Reset</button>
+      <input id="scenarioTime" type="range" min="0" max="60" step="0.1" value="0">
+      <div id="deliveryReadout">t = 0.0 min; delivery = 0.50 mL/min</div>
+      <svg id="wave" viewBox="0 0 260 58" preserveAspectRatio="none" aria-label="Illustrative delivery waveform">
+        <path id="waveFill" fill="#dce8f8" stroke="none"></path>
+        <path id="wavePath" fill="none" stroke="#235aa6" stroke-width="2"></path>
+        <line x1="0" y1="47" x2="260" y2="47" stroke="#9aa4ae" stroke-dasharray="3 3"></line>
+        <line x1="0" y1="6" x2="260" y2="6" stroke="#c43c39" stroke-dasharray="2 3"></line>
+        <circle id="waveMarker" r="3.5" fill="#d73027"></circle>
+      </svg>
+    </div>
+    <div id="status">Loading geometry...</div>
+  </div>
+  <canvas id="view"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.84.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.84.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.84.0/examples/js/loaders/JSONLoader.js"></script>
+  <script>
+    const canvas = document.getElementById('view');
+    const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setClearColor(0xf7f8fa, 1);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 10000);
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.enablePan = true;
+    controls.screenSpacePanning = true;
+    controls.mouseButtons = { ORBIT: THREE.MOUSE.LEFT, ZOOM: THREE.MOUSE.MIDDLE, PAN: THREE.MOUSE.RIGHT };
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.6));
+    const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(1, 2, 3); scene.add(key);
+    const group = new THREE.Group(); scene.add(group);
+    let tree, surface, surfaceMaterial, treeMaterial, wireframe = false, playing = false, lastFrame = performance.now();
+    const status = document.getElementById('status');
+    const loader = new THREE.JSONLoader();
+    function load(url, kind) {
+      return new Promise((resolve, reject) => loader.load(url, (geometry) => {
+        geometry.computeBoundingBox();
+        if (kind === 'tree') {
+          treeMaterial = new THREE.MeshPhongMaterial({color: 0xe53935, side: THREE.DoubleSide, shininess: 70});
+          tree = new THREE.Mesh(geometry, treeMaterial);
+          tree.name = 'biliary tree'; group.add(tree);
+        } else {
+          surfaceMaterial = new THREE.MeshPhongMaterial({color: 0xd9a441, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, wireframe: false});
+          surface = new THREE.Mesh(geometry, surfaceMaterial); surface.name = 'liver surface'; group.add(surface);
+        }
+        resolve(geometry);
+      }, undefined, reject));
+    }
+    function fitView() {
+      const box = new THREE.Box3().setFromObject(group), size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+      const radius = Math.max(size.x, size.y, size.z) * 0.5 || 1;
+      camera.position.copy(center).add(new THREE.Vector3(radius * 1.7, radius * 1.25, radius * 2.3));
+      camera.near = Math.max(radius / 1000, 0.01); camera.far = Math.max(radius * 20, 100); camera.updateProjectionMatrix();
+      controls.target.copy(center); controls.update();
+    }
+    function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    document.getElementById('showTree').onchange = e => tree.visible = e.target.checked;
+    document.getElementById('showSurface').onchange = e => surface.visible = e.target.checked;
+    document.getElementById('opacity').oninput = e => { surfaceMaterial.opacity = +e.target.value; document.getElementById('opacityValue').value = e.target.value; };
+    document.getElementById('fit').onclick = fitView;
+    document.getElementById('wire').onclick = e => { wireframe = !wireframe; surfaceMaterial.wireframe = wireframe; e.target.textContent = wireframe ? 'Solid surface' : 'Surface wireframe'; };
+    const timeSlider = document.getElementById('scenarioTime');
+    const deliveryReadout = document.getElementById('deliveryReadout');
+    const wavePath = document.getElementById('wavePath');
+    const waveFill = document.getElementById('waveFill');
+    const waveMarker = document.getElementById('waveMarker');
+    function deliveryAt(t) { const tau = 12; return 0.50 + 2.00 * (t / tau) * Math.exp(1 - t / tau); }
+    function updateScenario(t) {
+      t = Math.max(0, Math.min(60, t));
+      timeSlider.value = t;
+      const q = deliveryAt(t), f = (q - 0.5) / 2.0;
+      if (treeMaterial) treeMaterial.color.setHSL(0.01 - 0.01 * f, 0.78, 0.48 + 0.12 * f);
+      deliveryReadout.textContent = `t = ${t.toFixed(1)} min; delivery = ${q.toFixed(2)} mL/min`;
+      const x = 260 * t / 60, y = 47 - 41 * f;
+      waveMarker.setAttribute('cx', x); waveMarker.setAttribute('cy', y);
+    }
+    function buildWaveform() {
+      const pts = [], fill = ['M 0 47'];
+      for (let i = 0; i <= 120; i++) { const t = i * 0.5, x = 260 * t / 60, y = 47 - 41 * ((deliveryAt(t) - 0.5) / 2.0); pts.push(`${i ? 'L' : 'M'} ${x.toFixed(2)} ${y.toFixed(2)}`); fill.push(`L ${x.toFixed(2)} ${y.toFixed(2)}`); }
+      fill.push('L 260 47 Z'); wavePath.setAttribute('d', pts.join(' ')); waveFill.setAttribute('d', fill.join(' '));
+    }
+    timeSlider.oninput = e => updateScenario(+e.target.value);
+    document.getElementById('play').onclick = e => { playing = !playing; e.target.textContent = playing ? 'Pause' : 'Play'; };
+    document.getElementById('reset').onclick = () => { playing = false; document.getElementById('play').textContent = 'Play'; updateScenario(0); };
+    buildWaveform(); updateScenario(0);
+    Promise.all([
+      load('../data/libzinc-json/S01_bile_1.json', 'tree'),
+      load('../data/libzinc-json/S01_surface_1.json', 'surface')
+    ]).then(([a, b]) => { fitView(); status.textContent = `Loaded tree and liver surface. Tree bounds: ${a.boundingBox.getSize(new THREE.Vector3()).toArray().map(v => v.toFixed(1)).join(' × ')}; surface bounds: ${b.boundingBox.getSize(new THREE.Vector3()).toArray().map(v => v.toFixed(1)).join(' × ')}.`; })
+      .catch(err => { console.error(err); status.textContent = 'Load failed. Serve the workspace over HTTP so the JSON assets can be fetched.'; });
+    addEventListener('resize', resize); resize();
+    (function animate(now) { requestAnimationFrame(animate); if (playing) { const t = (+timeSlider.value + (now - lastFrame) / 1000); updateScenario(t > 60 ? 0 : t); } lastFrame = now; controls.update(); renderer.render(scene, camera); })(performance.now());
+  </script>
+</body>
+</html>
