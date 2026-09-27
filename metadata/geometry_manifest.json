@@ -1,0 +1,35 @@
+{
+  "resource_name": "subject-specific-biliary-tree-geometry",
+  "release": "1.0.0",
+  "source_repository": "https://github.com/hwe001/hyu754.github.io",
+  "source_paths": [
+    "models/S01_bile_1.json",
+    "models/S01_surface_1.json",
+    "models/S01_bile_view.json",
+    "models/S01_surface_view.json"
+  ],
+  "assets": {
+    "biliary_tree": {
+      "file": "data/libzinc-json/S01_bile_1.json",
+      "format": "LibZinc legacy JSON / Three.js-compatible geometry",
+      "role": "subject-specific biliary-tree geometry"
+    },
+    "liver_surface": {
+      "file": "data/libzinc-json/S01_surface_1.json",
+      "format": "LibZinc legacy JSON / Three.js-compatible geometry",
+      "role": "liver surface context"
+    },
+    "one_dimensional_source": {
+      "node_file": "data/exnode-exelem/FLOW.exnode",
+      "element_file": "data/exnode-exelem/FLOW.exelem",
+      "role": "original one-dimensional source representation"
+    }
+  },
+  "unit_status": {
+    "coordinates": "unresolved",
+    "radius": "unresolved",
+    "flow": "unresolved",
+    "speed": "unresolved"
+  },
+  "physiological_interpretation": "not calibrated; geometry and topology resource only"
+}
